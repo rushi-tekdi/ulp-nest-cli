@@ -3,6 +3,9 @@ import { Console, Command, createSpinner } from 'nestjs-console';
 import { AxiosRequestConfig } from 'axios';
 import { HttpService } from '@nestjs/axios';
 
+//generate fake words
+const { faker } = require('@faker-js/faker');
+
 @Console()
 export class AppService {
   constructor(private readonly httpService: HttpService) {}
@@ -16,9 +19,10 @@ export class AppService {
     //read and write csv
     const csvParser = require('csv-parser');
     const { stringify } = require('csv-stringify');
-
     //start console
     const spin = createSpinner();
+    //md5 hash
+    const md5 = require('md5');
 
     //loading
     spin.start(`Loading Environment Variables...`);
@@ -255,65 +259,78 @@ export class AppService {
                 working_dir + run_date_time + '_enrollment.csv';
               let assessment_csv =
                 working_dir + run_date_time + '_assessment.csv';
-              let enrollment_csv_data = [
-                {
-                  village: 'CHITAL',
-                  sub_district: 'AMRELI',
-                  district: 'AMRELI',
-                  state: 'GUJARAT',
-                  pincode: '365620',
-                  lat: '18.5005103',
-                  long: '73.8137623',
-                },
-                {
-                  village: 'AHMADABAD (M CORP.)',
-                  sub_district: 'AHMADABAD CITY',
-                  district: 'AHMADABAD',
-                  state: 'GUJARAT',
-                  pincode: '380001',
-                  lat: '18.5007746',
-                  long: '73.8143227',
-                },
-                {
-                  village: 'KARAMSAD (M)',
-                  sub_district: 'ANAND',
-                  district: 'ANAND',
-                  state: 'GUJARAT',
-                  pincode: '388325',
-                  lat: '18.1470344',
-                  long: '75.4109822',
-                },
-                {
-                  village: 'SITAPUR',
-                  sub_district: 'MANDAL',
-                  district: 'AHMADABAD',
-                  state: 'GUJARAT',
-                  pincode: '382130',
-                  lat: '18.6184751',
-                  long: '73.846231',
-                },
-                {
-                  village: 'GAMPH',
-                  sub_district: 'DHOLERA',
-                  district: 'AHMADABAD',
-                  state: 'GUJARAT',
-                  pincode: '382455',
-                  lat: '18.5007802',
-                  long: '73.8143375',
-                },
-                {
-                  village: 'AMRELI (M + OG)',
-                  sub_district: 'AMRELI',
-                  district: 'AMRELI',
-                  state: 'GUJARAT',
-                  pincode: '365620',
-                  lat: '18.50069',
-                  long: '73.8143353',
-                },
-              ];
-
+              let enrollment_csv_data = [];
               let assessment_csv_data = [];
 
+              //generate sample data
+              const startDate_dob = new Date('1990-01-01');
+              const endDate_dob = new Date('2005-12-31');
+              const timeDiff_dob =
+                endDate_dob.getTime() - startDate_dob.getTime();
+              const startDate = new Date('2020-01-01');
+              const endDate = new Date('2022-12-31');
+              const timeDiff = endDate.getTime() - startDate.getTime();
+              const grades_list = ['A+', 'A', 'B', 'C', 'D'];
+              for (let i = 0; i < 10; i++) {
+                let student_first_name = faker.person.firstName();
+                let student_last_name = faker.person.lastName();
+                let student_username_name_temp =
+                  student_first_name +
+                  '_' +
+                  Math.floor(Math.random() * 1000 + 1);
+                let student_username_name =
+                  student_username_name_temp.toLowerCase();
+                let student_email = student_username_name + '@gmail.com';
+                let student_full_name =
+                  student_first_name + ' ' + student_last_name;
+                let student_id =
+                  Math.floor(Math.random() * 1000 + 1) +
+                  '_' +
+                  student_username_name;
+                let guardian_name =
+                  faker.person.firstName() + ' ' + faker.person.lastName();
+                let student_contact = '9999999999';
+                const randomTime_dob = Math.random() * timeDiff_dob;
+                const randomDate_dob = new Date(
+                  startDate_dob.getTime() + randomTime_dob,
+                );
+                const randomDate_dob_txt = randomDate_dob
+                  .toISOString()
+                  .slice(0, 10);
+                let student_dob = randomDate_dob_txt;
+                const randomTime = Math.random() * timeDiff;
+                const randomDate = new Date(startDate.getTime() + randomTime);
+                const randomDate_txt = randomDate.toISOString().slice(0, 10);
+                let student_enrolled_on = randomDate_txt;
+                let student_aadhar_token = md5(student_id);
+                let quarterlyAssessment = 3;
+                let student_marks = Math.floor(Math.random() * 300 + 1);
+                let marks_total = 300;
+                let marks_grade =
+                  grades_list[Math.floor(Math.random() * grades_list.length)];
+                enrollment_csv_data.push({
+                  username: student_username_name,
+                  name: student_full_name,
+                  email: student_email,
+                  contact: student_contact,
+                  student_id: student_id,
+                  guardian_name: guardian_name,
+                  enrolled_on: student_enrolled_on,
+                  aadhar_token: student_aadhar_token,
+                });
+                assessment_csv_data.push({
+                  username: student_username_name,
+                  name: student_full_name,
+                  email: student_email,
+                  contact: student_contact,
+                  student_id: student_id,
+                  dob: student_dob,
+                  quarterlyAssessment: quarterlyAssessment,
+                  marks: student_marks,
+                  total: marks_total,
+                  grade: marks_grade,
+                });
+              }
               //generate csv file
               //enrollment_csv
               stringify(
@@ -365,6 +382,7 @@ export class AppService {
             } else {
               spin.succeed('CSV Files Created.');
               console.log(JSON.stringify(csv_files_status, null, '\t'));
+              //post generated files to bulk enrollment and bulk assance
             }
           }
         }
