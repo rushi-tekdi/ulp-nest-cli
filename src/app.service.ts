@@ -19,6 +19,8 @@ export class AppService {
     //read and write csv
     const csvParser = require('csv-parser');
     const { stringify } = require('csv-stringify');
+    //FormData
+    const FormData = require('form-data');
     //start console
     const spin = createSpinner();
     //md5 hash
@@ -31,6 +33,7 @@ export class AppService {
     let BULK_ISSUANCE_URL = null;
     let DEFAULT_PASSWORD = null;
     let CLIENT_USERNAME = null;
+    let EWALLET_URL = null;
     let envs = await new Promise((done) =>
       setTimeout(() => {
         ULPCLI_VERSION = process.env.ULPCLI_VERSION;
@@ -38,12 +41,14 @@ export class AppService {
         BULK_ISSUANCE_URL = process.env.BULK_ISSUANCE_URL;
         DEFAULT_PASSWORD = process.env.DEFAULT_PASSWORD;
         CLIENT_USERNAME = process.env.CLIENT_USERNAME;
+        EWALLET_URL = process.env.EWALLET_URL;
         done({
           ULPCLI_VERSION: ULPCLI_VERSION,
           ULPCLI_NAME: ULPCLI_NAME,
           BULK_ISSUANCE_URL: BULK_ISSUANCE_URL,
           DEFAULT_PASSWORD: DEFAULT_PASSWORD,
           CLIENT_USERNAME: CLIENT_USERNAME,
+          EWALLET_URL: EWALLET_URL,
         });
       }, 2000),
     );
@@ -249,8 +254,9 @@ export class AppService {
             );
             //creating sample data files
             spin.start(`Creating CSV Files...`);
+            let enrollment_csv_data = [];
+            let assessment_csv_data = [];
             let csv_files_status = await new Promise<any>(async (done) => {
-              let csv_file_path = {};
               let working_dir = __dirname + '/temp/';
               const run_date_time = moment(moment().toDate()).format(
                 'DD_MMM_YYYY_hh_mm_ss_a',
@@ -259,9 +265,6 @@ export class AppService {
                 working_dir + run_date_time + '_enrollment.csv';
               let assessment_csv =
                 working_dir + run_date_time + '_assessment.csv';
-              let enrollment_csv_data = [];
-              let assessment_csv_data = [];
-
               //generate sample data
               const startDate_dob = new Date('1990-01-01');
               const endDate_dob = new Date('2005-12-31');
@@ -270,7 +273,6 @@ export class AppService {
               const startDate = new Date('2020-01-01');
               const endDate = new Date('2022-12-31');
               const timeDiff = endDate.getTime() - startDate.getTime();
-              const grades_list = ['A+', 'A', 'B', 'C', 'D'];
               for (let i = 0; i < 10; i++) {
                 let student_first_name = faker.person.firstName();
                 let student_last_name = faker.person.lastName();
@@ -303,32 +305,29 @@ export class AppService {
                 const randomDate_txt = randomDate.toISOString().slice(0, 10);
                 let student_enrolled_on = randomDate_txt;
                 let student_aadhar_token = md5(student_id);
-                let quarterlyAssessment = 3;
                 let student_marks = Math.floor(Math.random() * 300 + 1);
-                let marks_total = 300;
-                let marks_grade =
-                  grades_list[Math.floor(Math.random() * grades_list.length)];
                 enrollment_csv_data.push({
                   username: student_username_name,
-                  name: student_full_name,
+                  student_name: student_full_name,
                   email: student_email,
                   contact: student_contact,
                   student_id: student_id,
+                  reference_id: 'ref_' + student_id,
                   guardian_name: guardian_name,
                   enrolled_on: student_enrolled_on,
                   aadhar_token: student_aadhar_token,
+                  dob: student_dob,
                 });
                 assessment_csv_data.push({
                   username: student_username_name,
-                  name: student_full_name,
+                  student_name: student_full_name,
                   email: student_email,
                   contact: student_contact,
-                  student_id: student_id,
                   dob: student_dob,
-                  quarterlyAssessment: quarterlyAssessment,
+                  student_id: student_id,
+                  reference_id: 'ref_' + student_id,
+                  aadhar_token: student_aadhar_token,
                   marks: student_marks,
-                  total: marks_total,
-                  grade: marks_grade,
                 });
               }
               //generate csv file
@@ -383,34 +382,166 @@ export class AppService {
               spin.succeed('CSV Files Created.');
               console.log(JSON.stringify(csv_files_status, null, '\t'));
               //post generated files to bulk enrollment and bulk assance
+              //upload proof Of Enrollment
+              spin.start(`Uploading proof Of Enrollment...`);
+              let enrollment_response = await new Promise<any>(async (done) => {
+                var data = new FormData();
+                data.append(
+                  'csvfile',
+                  fs.createReadStream(csv_files_status.Enrollment),
+                );
+                data.append(
+                  'issuerDetail',
+                  '{"did":"' +
+                    ISSUER_DID +
+                    '","schoolid":"09580413502","schoolName":"CENTRAL PUBLIC ACEDEMY"}',
+                );
+                data.append(
+                  'vcData',
+                  '{"issuanceDate":"2023-01-06T11:56:27.259Z","expirationDate":"2023-10-06T11:56:27.259Z"}',
+                );
+                data.append(
+                  'credentialSubjectCommon',
+                  '{"grade":"class-7","academic_year":"2023-2024"}',
+                );
+                const url =
+                  BULK_ISSUANCE_URL + '/bulk/v1/uploadFiles/proofOfEnrollment';
+                const config: AxiosRequestConfig = {
+                  headers: {
+                    Authorization: 'Bearer ' + issuer_token,
+                    ...data.getHeaders(),
+                  },
+                };
+                let response_data = null;
+                try {
+                  const observable = this.httpService.post(url, data, config);
+                  const promise = observable.toPromise();
+                  const response = await promise;
+                  response_data = response.data;
+                } catch (e) {
+                  response_data = { error: e };
+                }
+                done(response_data);
+              });
+              if (
+                enrollment_response?.error ||
+                enrollment_response?.success === false
+              ) {
+                spin.fail('Upload proof Of Enrollment Failed.');
+                console.log(
+                  JSON.stringify(
+                    enrollment_response?.error
+                      ? enrollment_response.error
+                      : enrollment_response?.result
+                      ? enrollment_response.result
+                      : {},
+                    null,
+                    '\t',
+                  ),
+                );
+              } else {
+                spin.succeed(
+                  'Uploaded proofOfEnrollment. File ' +
+                    csv_files_status.Enrollment,
+                );
+                console.log(JSON.stringify(enrollment_response, null, '\t'));
+                //upload proof Of Assessment
+                spin.start(`Uploading proof Of Assessment...`);
+                let assessment_response = await new Promise<any>(
+                  async (done) => {
+                    var data = new FormData();
+                    data.append(
+                      'csvfile',
+                      fs.createReadStream(csv_files_status.Assessment),
+                    );
+                    data.append(
+                      'issuerDetail',
+                      '{"did":"' +
+                        ISSUER_DID +
+                        '","schoolid":"09580413502","schoolName":"CENTRAL PUBLIC ACEDEMY"}',
+                    );
+                    data.append(
+                      'vcData',
+                      '{"issuanceDate":"2023-01-06T11:56:27.259Z","expirationDate":"2023-10-06T11:56:27.259Z"}',
+                    );
+                    data.append(
+                      'credentialSubjectCommon',
+                      '{"grade":"class-1","academic_year":"2022-2023","assessment":"NAT assessment Lucknow mandal","total":"40","quarterlyAssessment":"3"}',
+                    );
+                    const url =
+                      BULK_ISSUANCE_URL +
+                      '/bulk/v1/uploadFiles/proofOfAssessment';
+                    const config: AxiosRequestConfig = {
+                      headers: {
+                        Authorization: 'Bearer ' + issuer_token,
+                        ...data.getHeaders(),
+                      },
+                    };
+                    let response_data = null;
+                    try {
+                      const observable = this.httpService.post(
+                        url,
+                        data,
+                        config,
+                      );
+                      const promise = observable.toPromise();
+                      const response = await promise;
+                      response_data = response.data;
+                    } catch (e) {
+                      response_data = { error: e };
+                    }
+                    done(response_data);
+                  },
+                );
+                if (
+                  assessment_response?.error ||
+                  assessment_response?.success === false
+                ) {
+                  spin.fail('Upload proof Of Assessment Failed.');
+                  console.log(
+                    JSON.stringify(
+                      assessment_response?.error
+                        ? assessment_response.error
+                        : assessment_response?.result
+                        ? assessment_response.result
+                        : {},
+                      null,
+                      '\t',
+                    ),
+                  );
+                } else {
+                  spin.succeed(
+                    'Uploaded proofOfAssessment. File ' +
+                      csv_files_status.Assessment,
+                  );
+                  console.log(JSON.stringify(assessment_response, null, '\t'));
+                  //give result logs
+                  spin.start(`Loading Result...`);
+                  let result_output = await new Promise<any>(async (done) => {
+                    let result_output_object = new Object();
+                    result_output_object['Detail'] = {
+                      'Ewallet URL': EWALLET_URL,
+                      Instruction:
+                        'Open URL in web browser, click on login and use below learner username and password to view Credentials Certificate.',
+                    };
+                    let learner_accounts = [];
+                    for (let i = 0; i < enrollment_csv_data.length; i++) {
+                      learner_accounts.push({
+                        username: enrollment_csv_data[i].username,
+                        password: DEFAULT_PASSWORD,
+                      });
+                    }
+                    result_output_object['Learner Accounts'] = learner_accounts;
+                    done(result_output_object);
+                  });
+                  spin.succeed('Loaded Result.');
+                  console.log(JSON.stringify(result_output, null, '\t'));
+                }
+              }
             }
           }
         }
       }
     }
-
-    /*
-    spin.start(`Listing files in directory`);
-
-    // simulate a long task of 1 seconds
-    let files = await new Promise((done) =>
-      setTimeout(() => done(['fileA', 'fileB']), 5000),
-    );
-
-    spin.succeed('Listing done');
-    console.log(JSON.stringify(files));
-
-    spin.start(`Listing files in directory`);
-
-    // simulate a long task of 1 seconds
-    files = await new Promise((done) =>
-      setTimeout(() => done(['fileC', 'fileD']), 5000),
-    );
-
-    spin.succeed('Listing done');
-
-    // send the response to the  cli
-    // you could also use process.stdout.write()
-    console.log(JSON.stringify(files));*/
   }
 }
