@@ -34,6 +34,7 @@ export class AppService {
     let DEFAULT_PASSWORD = null;
     let CLIENT_USERNAME = null;
     let EWALLET_URL = null;
+    let VERIFICATION_URL = null;
     let envs = await new Promise((done) =>
       setTimeout(() => {
         ULPCLI_VERSION = process.env.ULPCLI_VERSION;
@@ -42,6 +43,7 @@ export class AppService {
         DEFAULT_PASSWORD = process.env.DEFAULT_PASSWORD;
         CLIENT_USERNAME = process.env.CLIENT_USERNAME;
         EWALLET_URL = process.env.EWALLET_URL;
+        VERIFICATION_URL = process.env.VERIFICATION_URL;
         done({
           ULPCLI_VERSION: ULPCLI_VERSION,
           ULPCLI_NAME: ULPCLI_NAME,
@@ -49,6 +51,7 @@ export class AppService {
           DEFAULT_PASSWORD: DEFAULT_PASSWORD,
           CLIENT_USERNAME: CLIENT_USERNAME,
           EWALLET_URL: EWALLET_URL,
+          VERIFICATION_URL: VERIFICATION_URL,
         });
       }, 2000),
     );
@@ -466,7 +469,7 @@ export class AppService {
                     );
                     data.append(
                       'credentialSubjectCommon',
-                      '{"grade":"class-1","academic_year":"2022-2023","assessment":"NAT assessment Lucknow mandal","total":"40","quarterlyAssessment":"3"}',
+                      '{"grade":"class-6","academic_year":"2022-2023","assessment":"NAT assessment Lucknow mandal","total":"300","quarterlyAssessment":"3"}',
                     );
                     const url =
                       BULK_ISSUANCE_URL +
@@ -521,8 +524,11 @@ export class AppService {
                     let result_output_object = new Object();
                     result_output_object['Detail'] = {
                       'Ewallet URL': EWALLET_URL,
-                      Instruction:
+                      'Ewallet Instruction':
                         'Open URL in web browser, click on login and use below learner username and password to view Credentials Certificate.',
+                      'Verification URL': VERIFICATION_URL,
+                      'Verification Instruction':
+                        'Open URL in web browser, scan credentials code and check verification status',
                     };
                     let learner_accounts = [];
                     for (let i = 0; i < enrollment_csv_data.length; i++) {
